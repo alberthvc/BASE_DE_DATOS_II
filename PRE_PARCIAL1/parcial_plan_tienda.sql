@@ -103,3 +103,8 @@ INSERT INTO EMPLOYEE (EMP_CODE, EMP_TITLE, EMP_LNAME, EMP_FNAME, EMP_INITIAL, EM
 ('E011', 'Sra.', 'Moreno', 'Valentina', 'K', '1990-10-08', 'J011', 'S011', '2018-04-06', 2450.50);
 
 SELECT * FROM EMPLOYEE;
+
+-- comando para monstrar la descripcion de todas las columnas de mi base de datos
+SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_KEY 
+FROM INFORMATION_SCHEMA.COLUMNS 
+WHERE TABLE_SCHEMA = 'parcial_plan_tienda';
