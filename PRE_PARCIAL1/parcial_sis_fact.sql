@@ -1,7 +1,7 @@
 CREATE DATABASE IF NOT EXISTS parcial_sis_fact;
 USE parcial_sis_fact;
 
--- Tabla Producto: Agregamos más detalles del producto
+-- Crear tabla productos
 CREATE TABLE IF NOT EXISTS  producto (
     producto_id INT PRIMARY KEY AUTO_INCREMENT,
     nombre_producto VARCHAR(100) NOT NULL,
@@ -12,23 +12,23 @@ CREATE TABLE IF NOT EXISTS  producto (
     stock_actual INT DEFAULT 0,        -- Stock actual
     descripcion_producto TEXT,         -- Descripción detallada
     marca VARCHAR(50),                 -- Marca del producto
-    codigo_barras VARCHAR(50) UNIQUE,  -- Código de barras único
+    codigo_barras VARCHAR(50) UNIQUE,  -- Código de barras unico
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (tamano_id) REFERENCES tamano(tamano_id),
     FOREIGN KEY (categoria_producto_id) REFERENCES categorias_producto(categoria_producto_id)
 );
 
--- Tabla Categorias de Producto: Agregamos fechas de gestión
+-- Tabla categorias de producto / agregamos fechas de gestion
 CREATE TABLE categorias_producto (
     categoria_producto_id INT PRIMARY KEY AUTO_INCREMENT,
     categoria_id INT UNIQUE,
-    fecha_asignacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+    fecha_asignacion DATETIME DEFAULT CURRENT_TIMESTAMP, --fecha de gestion
     usuario_asignacion VARCHAR(50),
     estado_asignacion BOOLEAN DEFAULT true,
     FOREIGN KEY (categoria_id) REFERENCES categoria(categoria_id)
 );
 
--- Tabla Tamaño: Agregamos mas detalles de medidas
+-- Tabla tamano / 2 columnas con mas detalles de las medidas
 CREATE TABLE tamano (
     tamano_id INT PRIMARY KEY AUTO_INCREMENT,
     codigo_tamano VARCHAR(20) NOT NULL,
@@ -51,7 +51,7 @@ CREATE TABLE categoria (
 );
 
 
--- Tabla Color: Agregamos códigos de color y disponibilidad
+-- Tabla color, agragamos codigos de colores y disponibilidad
 CREATE TABLE color (
     color_id INT PRIMARY KEY AUTO_INCREMENT,
     codigo_color VARCHAR(20) NOT NULL,
@@ -74,11 +74,6 @@ CREATE TABLE colores_producto (
     FOREIGN KEY (producto_id) REFERENCES producto(producto_id),
     FOREIGN KEY (color_id) REFERENCES color(color_id)
 );
-
--- comando para monstrar la descripcion de todas las columnas de mi base de datos
-SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_KEY 
-FROM INFORMATION_SCHEMA.COLUMNS 
-
 -- Primero insertamos las categorias
 INSERT INTO categoria (categoria_principal, nombre_categoria, descripcion_categoria, estado_categoria) VALUES 
 ('Ropa', 'Camisetas', 'Todo tipo de camisetas casual y formal', true),
