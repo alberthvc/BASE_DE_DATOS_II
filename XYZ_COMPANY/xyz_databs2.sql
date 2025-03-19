@@ -206,3 +206,88 @@ DELIMITER ;
 CALL generar_fidelizacion();
 DROP PROCEDURE generar_fidelizacion;
 
+USE xyz_company;
+
+-- Vista 1: Resumen de usuarios con su informacion y perfil
+CREATE VIEW vw_usuarios_perfiles AS
+SELECT 
+    u.id_usuario, u.nombre, u.apellido, u.cargo, u.salario, u.fecha_ingreso, u.estado,
+    p.nombre AS perfil,
+    p.descripcion AS descripcion_perfil
+FROM 
+    usuarios u
+JOIN 
+    perfiles p ON u.id_perfil = p.id_perfil;
+
+-- Vista 2: Historial de login por usuario
+CREATE VIEW vw_historial_login AS
+SELECT 
+    u.id_usuario,
+    CONCAT(u.nombre, ' ', u.apellido) AS nombre_completo,
+    u.cargo,
+    l.fecha_hora,
+    l.estado_sesion,
+    l.ip_direccion
+FROM 
+    login l
+JOIN 
+    usuarios u ON l.id_usuario = u.id_usuario
+ORDER BY 
+    l.fecha_hora DESC;
+
+-- Vista 3: Participacion en actividades
+CREATE VIEW vw_participacion_actividades AS
+SELECT 
+    a.id_actividad,
+    a.nombre AS actividad,
+    a.fecha,
+    COUNT(f.id_usuario) AS total_participantes,
+    AVG(f.puntos) AS promedio_puntos,
+    MAX(f.puntos) AS max_puntos,
+    MIN(f.puntos) AS min_puntos
+FROM 
+    actividades a
+LEFT JOIN 
+    fidelizacion f ON a.id_actividad = f.id_actividad
+GROUP BY 
+    a.id_actividad, a.nombre, a.fecha
+ORDER BY 
+    a.fecha DESC;
+
+-- Vista 4: Ranking de usuarios por puntos de fidelizacion
+CREATE VIEW vw_ranking_fidelizacion AS
+SELECT 
+    u.id_usuario,
+    CONCAT(u.nombre, ' ', u.apellido) AS nombre_completo,
+    u.cargo,
+    p.nombre AS perfil,
+    SUM(f.puntos) AS total_puntos,
+    COUNT(DISTINCT f.id_actividad) AS actividades_participadas
+FROM 
+    usuarios u
+JOIN 
+    perfiles p ON u.id_perfil = p.id_perfil
+LEFT JOIN 
+    fidelizacion f ON u.id_usuario = f.id_usuario
+GROUP BY 
+    u.id_usuario, nombre_completo, u.cargo, perfil
+ORDER BY 
+    total_puntos DESC;
+
+-- Vista 5: Resumen mensual de fidelizacion
+CREATE VIEW vw_resumen_mensual_fidelizacion AS
+SELECT 
+    YEAR(a.fecha) AS anio,
+    MONTH(a.fecha) AS mes,
+    COUNT(DISTINCT a.id_actividad) AS total_actividades,
+    COUNT(DISTINCT f.id_usuario) AS total_usuarios_participantes,
+    SUM(f.puntos) AS total_puntos_otorgados,
+    AVG(f.puntos) AS promedio_puntos_por_usuario
+FROM 
+    actividades a
+LEFT JOIN 
+    fidelizacion f ON a.id_actividad = f.id_actividad
+GROUP BY 
+    YEAR(a.fecha), MONTH(a.fecha)
+ORDER BY 
+    anio, mes;
