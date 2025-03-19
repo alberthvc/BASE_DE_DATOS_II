@@ -291,3 +291,311 @@ GROUP BY
     YEAR(a.fecha), MONTH(a.fecha)
 ORDER BY 
     anio, mes;
+    
+    USE xyz_company;
+
+-- Procedimiento 1: Registrar nuevo inicio de sesión
+DELIMITER $$
+CREATE PROCEDURE sp_registrar_login(
+    IN p_id_usuario INT,
+    IN p_estado_sesion ENUM('Exitoso', 'Fallido'),
+    IN p_ip_direccion VARCHAR(15)
+)
+BEGIN
+    INSERT INTO login (id_usuario, fecha_hora, estado_sesion, ip_direccion)
+    VALUES (p_id_usuario, NOW(), p_estado_sesion, p_ip_direccion);
+    
+    SELECT 'Login registrado exitosamente' AS mensaje;
+END $$
+DELIMITER ;
+
+-- Procedimiento 2: Registrar participacion en actividad
+DELIMITER $$
+CREATE PROCEDURE sp_registrar_participacion(
+    IN p_id_usuario INT,
+    IN p_id_actividad INT,
+    IN p_puntos INT
+)
+BEGIN
+    DECLARE v_existe INT;
+    DECLARE v_max_puntos INT;
+    
+    -- Verificar si el usuario ya participó en esta actividad
+    SELECT COUNT(*) INTO v_existe 
+    FROM fidelizacion 
+    WHERE id_usuario = p_id_usuario AND id_actividad = p_id_actividad;
+    
+    -- Verificar puntos máximos de la actividad
+    SELECT puntos_maximos INTO v_max_puntos 
+    FROM actividades 
+    WHERE id_actividad = p_id_actividad;
+    
+    IF v_existe > 0 THEN
+        SELECT 'El usuario ya participó en esta actividad' AS mensaje;
+    ELSEIF p_puntos > v_max_puntos THEN
+        SELECT CONCAT('Error: Los puntos no pueden superar el máximo de la actividad (', v_max_puntos, ')') AS mensaje;
+    ELSE
+        INSERT INTO fidelizacion (id_usuario, id_actividad, puntos, fecha_registro)
+        VALUES (p_id_usuario, p_id_actividad, p_puntos, NOW());
+        
+        SELECT 'Participación registrada exitosamente' AS mensaje;
+    END IF;
+END $$
+DELIMITER ;
+
+-- Procedimiento 3: Crear nueva actividad
+DELIMITER $$
+CREATE PROCEDURE sp_crear_actividad(
+    IN p_nombre VARCHAR(100),
+    IN p_descripcion TEXT,
+    IN p_fecha DATE,
+    IN p_puntos_maximos INT
+)
+BEGIN
+    INSERT INTO actividades (nombre, descripcion, fecha, puntos_maximos)
+    VALUES (p_nombre, p_descripcion, p_fecha, p_puntos_maximos);
+    
+    SELECT 'Actividad creada exitosamente' AS mensaje;
+END $$
+DELIMITER ;
+
+-- Procedimiento 4: Obtener reporte de fidelización por período
+DELIMITER $$
+CREATE PROCEDURE sp_reporte_fidelizacion(
+    IN p_fecha_inicio DATE,
+    IN p_fecha_fin DATE
+)
+BEGIN
+    SELECT 
+        u.id_usuario,
+        CONCAT(u.nombre, ' ', u.apellido) AS nombre_completo,
+        u.cargo,
+        p.nombre AS perfil,
+        COUNT(DISTINCT f.id_actividad) AS actividades_participadas,
+        SUM(f.puntos) AS total_puntos
+    FROM 
+        usuarios u
+    JOIN 
+        perfiles p ON u.id_perfil = p.id_perfil
+    LEFT JOIN 
+        fidelizacion f ON u.id_usuario = f.id_usuario
+    LEFT JOIN 
+        actividades a ON f.id_actividad = a.id_actividad
+    WHERE 
+        a.fecha BETWEEN p_fecha_inicio AND p_fecha_fin
+    GROUP BY 
+        u.id_usuario, nombre_completo, u.cargo, perfil
+    ORDER BY 
+        total_puntos DESC;
+END $$
+DELIMITER ;
+
+-- Procedimiento 5: Cambiar estado de usuario
+DELIMITER $$
+CREATE PROCEDURE sp_cambiar_estado_usuario(
+    IN p_id_usuario INT,
+    IN p_nuevo_estado ENUM('Activo', 'Inactivo')
+)
+BEGIN
+    UPDATE usuarios
+    SET estado = p_nuevo_estado
+    WHERE id_usuario = p_id_usuario;
+    
+    SELECT CONCAT('Estado del usuario actualizado a: ', p_nuevo_estado) AS mensaje;
+END $$
+DELIMITER ;
+
+-- consultas 
+-- 1. Ver todos los usuarios con sus perfiles
+SELECT * FROM vw_usuarios_perfiles;
+
+-- 2. Ver historial de login de los ultimos 30 días
+SELECT * FROM vw_historial_login
+WHERE fecha_hora >= DATE_SUB(CURDATE(), INTERVAL 30 DAY);
+
+-- 3. Consultar el ranking de fidelización
+SELECT * FROM vw_ranking_fidelizacion;
+
+-- 4. Ver usuarios que participaron en más del 50% de las actividades
+SELECT 
+    nombre_completo, 
+    perfil,
+    actividades_participadas,
+    total_puntos,
+    ROUND((actividades_participadas / (SELECT COUNT(*) FROM actividades)) * 100, 2) AS porcentaje_participacion
+FROM 
+    vw_ranking_fidelizacion
+WHERE 
+    (actividades_participadas / (SELECT COUNT(*) FROM actividades)) * 100 > 50
+ORDER BY 
+    porcentaje_participacion DESC;
+
+-- 5. Consultar resumen mensual de fidelizacion
+SELECT * FROM vw_resumen_mensual_fidelizacion;
+
+-- 6. Consultar las actividades con mayor participacion
+SELECT 
+    id_actividad,
+    actividad,
+    fecha,
+    total_participantes,
+    promedio_puntos
+FROM 
+    vw_participacion_actividades
+ORDER BY 
+    total_participantes DESC
+LIMIT 5;
+
+-- 7. Calcular el promedio de salario por perfil
+SELECT 
+    p.nombre AS perfil,
+    ROUND(AVG(u.salario), 2) AS salario_promedio,
+    COUNT(u.id_usuario) AS total_usuarios
+FROM 
+    usuarios u
+JOIN 
+    perfiles p ON u.id_perfil = p.id_perfil
+GROUP BY 
+    p.nombre
+ORDER BY 
+    salario_promedio DESC;
+
+-- 8. Obtener el total de puntos de fidelizacion por departamento (perfil)
+SELECT 
+    p.nombre AS perfil,
+    SUM(f.puntos) AS total_puntos,
+    COUNT(DISTINCT u.id_usuario) AS total_usuarios,
+    ROUND(SUM(f.puntos) / COUNT(DISTINCT u.id_usuario), 2) AS promedio_por_usuario
+FROM 
+    perfiles p
+JOIN 
+    usuarios u ON p.id_perfil = u.id_perfil
+LEFT JOIN 
+    fidelizacion f ON u.id_usuario = f.id_usuario
+GROUP BY 
+    p.nombre
+ORDER BY 
+    total_puntos DESC;
+
+USE xyz_company;
+
+-- Indices para la tabla de usuarios
+CREATE INDEX idx_usuarios_perfil ON usuarios(id_perfil);
+CREATE INDEX idx_usuarios_estado ON usuarios(estado);
+CREATE INDEX idx_usuarios_cargo ON usuarios(cargo);
+CREATE INDEX idx_usuarios_fecha_ingreso ON usuarios(fecha_ingreso);
+
+-- Indices para la tabla de login
+CREATE INDEX idx_login_usuario ON login(id_usuario);
+CREATE INDEX idx_login_fecha ON login(fecha_hora);
+CREATE INDEX idx_login_estado ON login(estado_sesion);
+
+-- Indices para la tabla de actividades
+CREATE INDEX idx_actividades_fecha ON actividades(fecha);
+
+-- Indices para la tabla de fidelizacion
+CREATE INDEX idx_fidelizacion_usuario ON fidelizacion(id_usuario);
+CREATE INDEX idx_fidelizacion_actividad ON fidelizacion(id_actividad);
+CREATE INDEX idx_fidelizacion_fecha ON fidelizacion(fecha_registro);
+CREATE INDEX idx_fidelizacion_puntos ON fidelizacion(puntos);
+
+-- Indice compuesto para análisis de participaciin por usuario y fecha
+CREATE INDEX idx_fidelizacion_usuario_fecha ON fidelizacion(id_usuario, fecha_registro);
+
+USE xyz_company;
+
+-- Trigger 1: Auditoría de cambios en usuarios
+DELIMITER $$
+CREATE TABLE IF NOT EXISTS auditoria_usuarios (
+    id_auditoria INT AUTO_INCREMENT PRIMARY KEY,
+    id_usuario INT NOT NULL,
+    accion ENUM('INSERT', 'UPDATE', 'DELETE') NOT NULL,
+    campo_modificado VARCHAR(50),
+    valor_antiguo VARCHAR(255),
+    valor_nuevo VARCHAR(255),
+    usuario_bd VARCHAR(100),
+    fecha_hora DATETIME
+);
+
+DELIMITER $$
+
+CREATE TRIGGER trg_usuarios_after_update
+AFTER UPDATE ON usuarios
+FOR EACH ROW
+BEGIN
+    -- Verificar si el campo 'nombre' ha cambiado
+    IF OLD.nombre != NEW.nombre THEN
+        INSERT INTO auditoria_usuarios (id_usuario, accion, campo_modificado, valor_antiguo, valor_nuevo, usuario_bd, fecha_hora)
+        VALUES (NEW.id_usuario, 'UPDATE', 'nombre', OLD.nombre, NEW.nombre, USER(), NOW());
+    END IF;
+    
+    -- Verificar si el campo 'apellido' ha cambiado
+    IF OLD.apellido != NEW.apellido THEN
+        INSERT INTO auditoria_usuarios (id_usuario, accion, campo_modificado, valor_antiguo, valor_nuevo, usuario_bd, fecha_hora)
+        VALUES (NEW.id_usuario, 'UPDATE', 'apellido', OLD.apellido, NEW.apellido, USER(), NOW());
+    END IF;
+    
+    -- Verificar si el campo 'estado' ha cambiado
+    IF OLD.estado != NEW.estado THEN
+        INSERT INTO auditoria_usuarios (id_usuario, accion, campo_modificado, valor_antiguo, valor_nuevo, usuario_bd, fecha_hora)
+        VALUES (NEW.id_usuario, 'UPDATE', 'estado', OLD.estado, NEW.estado, USER(), NOW());
+    END IF;
+    
+    -- Verificar si el campo 'cargo' o 'salario' ha cambiado
+    IF OLD.cargo != NEW.cargo OR OLD.salario != NEW.salario THEN
+        INSERT INTO auditoria_usuarios (id_usuario, accion, campo_modificado, valor_antiguo, valor_nuevo, usuario_bd, fecha_hora)
+        VALUES (NEW.id_usuario, 'UPDATE', 'cargo_salario', CONCAT(OLD.cargo, ' / ', OLD.salario), CONCAT(NEW.cargo, ' / ', NEW.salario), USER(), NOW());
+    END IF;
+END$$
+
+DELIMITER ;
+
+-- Trigger 2
+DELIMITER $$
+
+-- Trigger 2: Validación de puntos en fidelizacion
+CREATE TRIGGER trg_fidelizacion_before_insert
+BEFORE INSERT ON fidelizacion
+FOR EACH ROW
+BEGIN
+    DECLARE v_max_puntos INT;
+    
+    -- Obtener los puntos maximos de la actividad
+    SELECT puntos_maximos INTO v_max_puntos 
+    FROM actividades 
+    WHERE id_actividad = NEW.id_actividad;
+    
+    -- Validar que los puntos no excedan el máximo
+    IF NEW.puntos > v_max_puntos THEN
+        SET NEW.puntos = v_max_puntos;
+    END IF;
+END$$
+
+
+DELIMITER ;
+
+DELIMITER $$
+
+-- Trigger 3: Actualizar automáticamente la fecha de registro en fidelización
+CREATE TRIGGER trg_fidelizacion_before_insert_fecha
+BEFORE INSERT ON fidelizacion
+FOR EACH ROW
+BEGIN
+    -- Verificar si la fecha de registro es nula
+    IF NEW.fecha_registro IS NULL THEN
+        SET NEW.fecha_registro = NOW(); -- Asignar la fecha y hora actual
+    END IF;
+END$$
+
+DELIMITER ;
+
+DELIMITER $$
+-- Trigger 4: Registro automático de login exitoso al insertar un nuevo usuario
+CREATE TRIGGER trg_usuarios_after_insert
+AFTER INSERT ON usuarios
+FOR EACH ROW
+BEGIN
+    INSERT INTO login (id_usuario, fecha_hora, estado_sesion, ip_direccion)
+    VALUES (NEW.id_usuario, NOW(), 'Exitoso', '127.0.0.1');
+END $$
+DELIMITER ;
